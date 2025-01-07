@@ -7,6 +7,7 @@
 #include <format>
 #include <map>
 #include <set>
+#include <queue>
 
 using namespace std;
 
@@ -48,11 +49,23 @@ struct InputEvent
 
 struct Table // Для хранения информации о столах будет использован (map)
 {
-    int number;
+    // int number;
+    bool occupied;
     int money;
     int work_time;
+    // Time start;
+    // Time end;
 
-    Table(int n = 0, int m = 0, int w = 0) : number(n), money(m), work_time(w) {}
+    Table(bool o = false, int m = 0, int w = 0) : occupied(o), money(m), work_time(w) {}
+
+    friend ostream &operator<<(ostream &os, const Table &table)
+    {
+        os << format("Occupied: {}, Money: {}, Work time: {}",
+                     table.occupied ? "Yes" : "No",
+                     table.money,
+                     table.work_time);
+        return os;
+    }
 };
 
 string checkArgument(int argc, char *argv[])
@@ -67,12 +80,19 @@ string checkArgument(int argc, char *argv[])
     }
 }
 
-// int roundToHours(){
-//     // return (time in minutes) / 60;
-// }
+int roundToHours(int minutes)
+{
+    return (minutes / 60);
+}
 
 bool checkDataFormat()
 {
+    // Делать либо через ASCII сравнения, либо регулярные выражения <regex> - главный параметр скорость обработки
+    // Функция должна возвращать True - если всё верно, False - если присутствуют данные, которые не удовлетворяют требованиям
+    // 1) Сделать как одну функцию, которая проходит по if, else if и если там нету то break - но много затраченного времени
+    // 2) Написать для каждого типа данных свою функцию, использовать в readFile()
+
+    // Требования:
     // Имена клиентов представляют собой комбинацию символов из алфавита a..z, 0..9, _, -
     // Время задается в 24-часовом формате с двоеточием в качестве разделителя XX:XX, незначащие нули обязательны при вводе и выводе (например 15:03 или 08:09).
     // Каждый стол имеет свой номер от 1 до N, где N – общее число столов, указанное в конфигурации.
@@ -80,6 +100,7 @@ bool checkDataFormat()
     return true;
 }
 
+// Получаем данные из файла в структуру InputData для дальнейшего взаимодествия
 InputData readFile(string filename)
 {
     InputData data;
@@ -102,12 +123,12 @@ InputData readFile(string filename)
     istringstream stream_time_start(time_start);
     int start_hour, start_minute;
     stream_time_start >> start_hour >> colon >> start_minute;
-    data.time_open = Time(start_hour, start_minute);
+    data.time_open = Time(start_hour, start_minute); // получаем время открытия
 
     istringstream stream_time_end(time_end);
     int end_hour, end_minute;
     stream_time_end >> end_hour >> colon >> end_minute;
-    data.time_close = Time(end_hour, end_minute);
+    data.time_close = Time(end_hour, end_minute); // получаем время закрытия
 
     file >> data.coast; // получаем стоимость часа
     file.ignore(numeric_limits<streamsize>::max(), '\n');
@@ -124,6 +145,13 @@ void StartEvent(InputData data)
 {
     map<int, Table> tableStats; // Будем хранить для каждого стола выручку и время использования
     set<string> ClientList;     // Будем хранить имена посетителей
+    queue<string> fifo;         // Очередь людей
+
+    // Заполняем информацию о столах
+    for (int i = 1; i <= data.count_of_table; i++)
+    {
+        tableStats[i] = Table(false, 0, 0);
+    }
 
     data.time_open.print();
     int time_start = data.time_open.toMinutes();
@@ -149,50 +177,83 @@ void StartEvent(InputData data)
         event.time = Time(hour, minute);
         cout << format("{:02}:{:02} {} {} {}", event.time.hours, event.time.minutes, event.id_event, event.name_client, (event.table == -1 ? " " : to_string(event.table))) << endl;
 
-        if (event.time.toMinutes() < time_start || event.time.toMinutes() > time_end)
-        {
-            cout << format("{:02}:{:02} 13 NotOpenYet", event.time.hours, event.time.minutes) << endl;
-            continue;
-        }
         int id = event.id_event;
         string name = event.name_client;
+        int event_time = event.time.toMinutes();
         switch (id)
         {
         case 1: // client comming
-            if (ClientList.count(name))
+            if (event_time < time_start ||  event_time > time_end) // Проверка, что клиент пришёл в рабочее время
+            {
+                cout << format("{:02}:{:02} 13 NotOpenYet", event.time.hours, event.time.minutes) << endl;
+                continue;
+            }
+            else if (ClientList.count(name)) // Проверка на наличие клиента в ПК клубе
             {
                 cout << format("{:02}:{:02} 13 YouShallNotPass", event.time.hours, event.time.minutes) << endl;
             }
             else
             {
-                ClientList.insert(name);
+                ClientList.insert(name); // Добавление имени клиента в список присутствующих
             }
             break;
         case 2: // take table
-            if (!ClientList.count(name))
+            if (!ClientList.count(name)) // Проверка на наличие клиента в ПК клубе
             {
                 cout << format("{:02}:{:02} 13 ClientUnknown", event.time.hours, event.time.minutes) << endl;
             }
-            else{
+            else if (tableStats[event.table].occupied) // Проверка свободен ли стол
+            {
+                cout << format("{:02}:{:02} 13 PlaceIsBusy", event.time.hours, event.time.minutes) << endl;
+            }
+            else // Если стол свободен, то клиент садится
+            {
                 // Информация вносится в map tableStats
+                tableStats[event.table].occupied = true;
+                tableStats[event.table].work_time = event.time.toMinutes();
             }
             break;
         case 3: // waiting
-            // проверка if(queue.size() > count(PC)){
-            //     cout << format("{:02}:{:02} 11 {}", event.time.hours, event.time.minutes,name) << endl;
-            // }
+            // Проверка на свободные столы, если их нету, то клиент уходит
+            // if( условием ){ проверять все столы, пока не occupied = FALSE}
+            if(fifo.size() + 1 > tableStats.size()){ // сменить IF на ELSE IF, когда сделаю норм IF на проверку занятости всех столов
+                cout << format("{:02}:{:02} 11 {}", event.time.hours, event.time.minutes,name) << endl;
+            }
             break;
         case 4: // walk away from table
             if (!ClientList.count(name))
             {
                 cout << format("{:02}:{:02} 13 ClientUnknown", event.time.hours, event.time.minutes) << endl;
             }
-            // Проверка сколько времени он просидел за компьютером => вычисляем прибыль от клиента
+
+            // Наступило время закрытия? Да, то событие 11.
+            // cout << format("{:02}:{:02} 11 {}", event.time.hours, event.time.minutes, event.n) << endl;
+
+            // Проверка сколько времени он просидел за компьютером (От "переменной - время сейчас")
+            // Вычисляем прибыль от клиента (через while делим минуты на 60, пока остаток не равен 0)
             // Обновление информации в map tableStats
+
+            // Проверка на наличие очереди:
+            // Если в ней есть клиент, то генерируется событие 12, и за свободный стол, садится первый клиент из очереди, удаляется из очереди
             break;
         }
     }
-    data.time_close.print();
+
+    data.time_close.print();  // Вызвать событие 11, для всех клиентов, которые сейчас в ПК клубе ДО вывода времени закрытия
+
+    // Выводим информацию о столах
+    for (const auto &[key, value] : tableStats)
+    {
+        cout << "Table " << key << ": " << value << endl;
+    }
+
+    // Очистка памяти
+    ClientList.clear();
+    tableStats.clear();
+    while (!fifo.empty())
+    {
+        fifo.pop();
+    }
 }
 
 int main(int argc, char *argv[])
