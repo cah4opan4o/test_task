@@ -8,6 +8,7 @@
 #include <map>
 #include <set>
 #include <queue>
+#include <regex>
 
 using namespace std;
 
@@ -85,20 +86,22 @@ int roundToHours(int minutes)
     return (minutes / 60);
 }
 
-bool checkDataFormat()
-{
-    // Делать либо через ASCII сравнения, либо регулярные выражения <regex> - главный параметр скорость обработки
-    // Функция должна возвращать True - если всё верно, False - если присутствуют данные, которые не удовлетворяют требованиям
-    // 1) Сделать как одну функцию, которая проходит по if, else if и если там нету то break - но много затраченного времени
-    // 2) Написать для каждого типа данных свою функцию, использовать в readFile()
-
-    // Требования:
-    // Имена клиентов представляют собой комбинацию символов из алфавита a..z, 0..9, _, -
-    // Время задается в 24-часовом формате с двоеточием в качестве разделителя XX:XX, незначащие нули обязательны при вводе и выводе (например 15:03 или 08:09).
-    // Каждый стол имеет свой номер от 1 до N, где N – общее число столов, указанное в конфигурации.
-    // Все события идут последовательно во времени. (время события N+1) ≥ (время события N).
-    return true;
+bool checkTimeFormat(string time){
+    regex time_regex ("^[01][0-9]|2[0-3]:[0-5][0-9]$");
+    return regex_match(time,time_regex);
 }
+// warning: unknown escape sequence: '\d'
+// bool checkNumberFormat(string number){
+//     regex number_regex = "[^[1-9]\d*$]";
+//     return regex_match(number,number_regex);
+// }
+
+
+// bool checkEventFormat(string event)
+// {
+//     regex event_regex = "(^[01][0-9]|2[0-3]:[0-5][0-9]) ([1-9]\d*) ([a-z0-9_-]+) (?: ([1-9]\d*))?$)";
+//     return regex_match(event,event_regex);
+// }
 
 // Получаем данные из файла в структуру InputData для дальнейшего взаимодествия
 InputData readFile(string filename)
@@ -118,6 +121,10 @@ InputData readFile(string filename)
     istringstream stream(time_string);
     string time_start, time_end;
     stream >> time_start >> time_end;
+    
+    if (!checkTimeFormat(time_start) || !checkTimeFormat(time_end)){ // Проверка строк на формат времени
+        throw time_string;
+    }
 
     char colon; // поглащене ':' из строки
     istringstream stream_time_start(time_start);
@@ -131,11 +138,15 @@ InputData readFile(string filename)
     data.time_close = Time(end_hour, end_minute); // получаем время закрытия
 
     file >> data.coast; // получаем стоимость часа
+    // проверка на время
     file.ignore(numeric_limits<streamsize>::max(), '\n');
 
     string event;
+    Time swap_time = Time(0,0);
     while (getline(file, event))
     {
+        // Проверка event на формат
+
         data.events.push_back(event);
     }
     return data;
@@ -258,13 +269,20 @@ void StartEvent(InputData data)
 
 int main(int argc, char *argv[])
 {
+    // Так как из строки при проверке мне так и так надо получать время, надо будет объеденить функции
+    // readFile() + StartEvent() => Где идёт считывание данных из файла сразу в структуры, которые там и обрабатываются
     try // Может не работать, пока пересматриваю структуры
     {
         string filename = checkArgument(argc, argv);
         InputData data = readFile(filename);
         StartEvent(data);
     }
-    catch (const char *error_message)
+        catch (const char* error_message)
+    {
+        cout << error_message << endl;
+        return 1;
+    }
+    catch (const string error_message)
     {
         cout << error_message << endl;
         return 1;
