@@ -8,6 +8,7 @@
 #include <map>
 #include <set>
 #include <queue>
+#include <regex>
 
 using namespace std;
 
@@ -85,19 +86,15 @@ int roundToHours(int minutes)
     return (minutes / 60);
 }
 
-bool checkDataFormat()
-{
-    // Делать либо через ASCII сравнения, либо регулярные выражения <regex> - главный параметр скорость обработки
-    // Функция должна возвращать True - если всё верно, False - если присутствуют данные, которые не удовлетворяют требованиям
-    // 1) Сделать как одну функцию, которая проходит по if, else if и если там нету то break - но много затраченного времени
-    // 2) Написать для каждого типа данных свою функцию, использовать в readFile()
+bool checkTimeFormat(string time){
+    regex time_regex (R"(^([01][0-9]|2[0-3]):[0-5][0-9]$)");
+    return regex_match(time,time_regex);
+}
 
-    // Требования:
-    // Имена клиентов представляют собой комбинацию символов из алфавита a..z, 0..9, _, -
-    // Время задается в 24-часовом формате с двоеточием в качестве разделителя XX:XX, незначащие нули обязательны при вводе и выводе (например 15:03 или 08:09).
-    // Каждый стол имеет свой номер от 1 до N, где N – общее число столов, указанное в конфигурации.
-    // Все события идут последовательно во времени. (время события N+1) ≥ (время события N).
-    return true;
+bool checkEventFormat(string event)
+{
+    regex event_regex(R"(^([01][0-9]|2[0-3]):([0-5][0-9]) ([1-9]\d*) ([a-z0-9_-]+)(?: ([1-9]\d*))?$)");
+    return regex_match(event,event_regex);
 }
 
 // Получаем данные из файла в структуру InputData для дальнейшего взаимодествия
@@ -118,6 +115,11 @@ InputData readFile(string filename)
     istringstream stream(time_string);
     string time_start, time_end;
     stream >> time_start >> time_end;
+    
+    if (!checkTimeFormat(time_start) || !checkTimeFormat(time_end))
+    { // Проверка строк на формат времени
+        throw time_string;
+    }
 
     char colon; // поглащене ':' из строки
     istringstream stream_time_start(time_start);
@@ -131,11 +133,20 @@ InputData readFile(string filename)
     data.time_close = Time(end_hour, end_minute); // получаем время закрытия
 
     file >> data.coast; // получаем стоимость часа
+    // проверка на время
     file.ignore(numeric_limits<streamsize>::max(), '\n');
 
     string event;
+    Time swap_time = Time(0, 0);
     while (getline(file, event))
     {
+        // Проверка event на формат
+        // if(!checkEventFormat(event)){
+        //     throw event;
+        // }
+        // else{
+        //     data.events.push_back(event);
+        // }
         data.events.push_back(event);
     }
     return data;
@@ -182,8 +193,8 @@ void StartEvent(InputData data)
         int event_time = event.time.toMinutes();
         switch (id)
         {
-        case 1: // client comming
-            if (event_time < time_start ||  event_time > time_end) // Проверка, что клиент пришёл в рабочее время
+        case 1:                                                   // client comming
+            if (event_time < time_start || event_time > time_end) // Проверка, что клиент пришёл в рабочее время
             {
                 cout << format("{:02}:{:02} 13 NotOpenYet", event.time.hours, event.time.minutes) << endl;
                 continue;
@@ -197,7 +208,7 @@ void StartEvent(InputData data)
                 ClientList.insert(name); // Добавление имени клиента в список присутствующих
             }
             break;
-        case 2: // take table
+        case 2:                          // take table
             if (!ClientList.count(name)) // Проверка на наличие клиента в ПК клубе
             {
                 cout << format("{:02}:{:02} 13 ClientUnknown", event.time.hours, event.time.minutes) << endl;
@@ -216,8 +227,9 @@ void StartEvent(InputData data)
         case 3: // waiting
             // Проверка на свободные столы, если их нету, то клиент уходит
             // if( условием ){ проверять все столы, пока не occupied = FALSE}
-            if(fifo.size() + 1 > tableStats.size()){ // сменить IF на ELSE IF, когда сделаю норм IF на проверку занятости всех столов
-                cout << format("{:02}:{:02} 11 {}", event.time.hours, event.time.minutes,name) << endl;
+            if (fifo.size() + 1 > tableStats.size())
+            { // сменить IF на ELSE IF, когда сделаю норм IF на проверку занятости всех столов
+                cout << format("{:02}:{:02} 11 {}", event.time.hours, event.time.minutes, name) << endl;
             }
             break;
         case 4: // walk away from table
@@ -239,7 +251,7 @@ void StartEvent(InputData data)
         }
     }
 
-    data.time_close.print();  // Вызвать событие 11, для всех клиентов, которые сейчас в ПК клубе ДО вывода времени закрытия
+    data.time_close.print(); // Вызвать событие 11, для всех клиентов, которые сейчас в ПК клубе ДО вывода времени закрытия
 
     // Выводим информацию о столах
     for (const auto &[key, value] : tableStats)
@@ -256,6 +268,7 @@ void StartEvent(InputData data)
     }
 }
 
+
 int main(int argc, char *argv[])
 {
     try // Может не работать, пока пересматриваю структуры
@@ -265,6 +278,11 @@ int main(int argc, char *argv[])
         StartEvent(data);
     }
     catch (const char *error_message)
+    {
+        cout << error_message << endl;
+        return 1;
+    }
+    catch (const string error_message)
     {
         cout << error_message << endl;
         return 1;
