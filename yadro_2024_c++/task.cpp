@@ -51,18 +51,16 @@ struct InputData
 struct Table // Для хранения информации о столах будет использован (map)
 {
     // int number;
-    bool occupied;
+    string occupied;
     int money;
     int work_time;
-    // Time start;
-    // Time end;
+    int time_table_occupied;
 
-    Table(bool o = false, int m = 0, int w = 0) : occupied(o), money(m), work_time(w) {}
+    Table(string o = "None", int m = 0, int w = 0, int t = 0) : occupied(o), money(m), work_time(w), time_table_occupied(t) {}
 
     friend ostream &operator<<(ostream &os, const Table &table)
     {
-        os << format("Occupied: {}, Money: {}, Work time: {}",
-                     table.occupied ? "Yes" : "No",
+        os << format("{} {}",
                      table.money,
                      table.work_time);
         return os;
@@ -81,12 +79,6 @@ string checkArgument(int argc, char *argv[])
     }
 }
 
-//Может пригодиться для подсчёта времени проведённого за столом
-int roundToHours(int minutes)
-{
-    return (minutes / 60);
-}
-
 bool checkTimeFormat(string time)
 {
     regex time_regex(R"(^([01][0-9]|2[0-3]):[0-5][0-9]$)");
@@ -97,6 +89,47 @@ bool checkEventFormat(string event)
 {
     regex event_regex(R"(^([01][0-9]|2[0-3]):([0-5][0-9]) ([1-9]\d*) ([a-z0-9_-]+)(?:\s([1-9]\d*))?\s*$)");
     return regex_match(event, event_regex);
+}
+
+int SpendHours(int minutes)
+{
+    int n = minutes / 60;
+    if (n % 60 > 0)
+    {
+        n++;
+    }
+    return n;
+}
+
+// Округрения времени до часов
+int roundToHours(int minutes)
+{
+    return (minutes / 60);
+}
+
+int findTable(map<int, Table> tableStats, string name)
+{
+    int n = 0;
+    for (int table = 1; table < tableStats.size(); table++)
+    {
+        if (tableStats[table].occupied == name)
+        {
+            n = table;
+        }
+    }
+    return n;
+}
+
+bool checkTableOccupied(map<int, Table> tableStats)
+{
+    for (int table = 1; table < tableStats.size(); table++)
+    {
+        if (tableStats[table].occupied == "None")
+        {
+            return true;
+        }
+    }
+    return false;
 }
 
 // Получаем данные из файла в структуру InputData для дальнейшего взаимодествия
@@ -141,11 +174,12 @@ InputData readFile(string filename)
     string event;
     Time swap_time = Time(0, 0);
     int intermediate_time = swap_time.toMinutes();
-    while (getline(file, event)){
+    while (getline(file, event))
+    {
         // Проверка event на формат
         if (!checkEventFormat(event)) // Надо решить проблему связанную с регулярным выражением для проверки
         {
-            cout << "CheckEventFormat"<< endl;
+            cout << "CheckEventFormat" << endl;
             throw event;
         }
         else
@@ -155,7 +189,7 @@ InputData readFile(string filename)
             string time;
             stream >> time >> object.id_event >> object.name_client;
 
-            if (!(stream >> object.table_number ))
+            if (!(stream >> object.table_number))
             {
                 object.table_number = -1;
             }
@@ -166,7 +200,7 @@ InputData readFile(string filename)
             stream_time >> hour >> colon >> minute;
             object.time = Time(hour, minute);
 
-            if (intermediate_time > object.time.toMinutes() || (object.table_number != -1 && (object.table_number < 1 || object.table_number > data.count_of_table) ))
+            if (intermediate_time > object.time.toMinutes() || (object.table_number != -1 && (object.table_number < 1 || object.table_number > data.count_of_table)))
             {
                 cout << "Time or Number of table" << endl;
                 throw format("{:02}:{:02} {} {} {}", object.time.hours, object.time.minutes, object.id_event, object.name_client, (object.table_number == -1 ? " " : to_string(object.table_number)));
@@ -191,7 +225,7 @@ void StartEvent(InputData data)
     // Заполняем информацию о столах
     for (int i = 1; i <= data.count_of_table; i++)
     {
-        tableStats[i] = Table(false, 0, 0);
+        tableStats[i] = Table("None", 0, 0, 0);
     }
 
     data.time_open.print();
@@ -205,14 +239,13 @@ void StartEvent(InputData data)
 
         int id = event.id_event;
         string name = event.name_client;
-        int event_time = event.time.toMinutes();
+        int time_event = event.time.toMinutes();
         switch (id)
         {
         case 1:                                                   // client comming
-            if (event_time < time_start || event_time > time_end) // Проверка, что клиент пришёл в рабочее время
+            if (time_event < time_start || time_event > time_end) // Проверка, что клиент пришёл в рабочее время
             {
                 cout << format("{:02}:{:02} 13 NotOpenYet", event.time.hours, event.time.minutes) << endl;
-                continue;
             }
             else if (ClientList.count(name)) // Проверка на наличие клиента в ПК клубе
             {
@@ -228,23 +261,41 @@ void StartEvent(InputData data)
             {
                 cout << format("{:02}:{:02} 13 ClientUnknown", event.time.hours, event.time.minutes) << endl;
             }
-            else if (tableStats[event.table_number].occupied) // Проверка свободен ли стол
+            else if (tableStats[event.table_number].occupied != "None") // Проверка свободен ли стол
             {
                 cout << format("{:02}:{:02} 13 PlaceIsBusy", event.time.hours, event.time.minutes) << endl;
             }
             else // Если стол свободен, то клиент садится
             {
-                // Информация вносится в map tableStats
-                tableStats[event.table_number].occupied = true;
-                tableStats[event.table_number].work_time = event.time.toMinutes();
+                // А как обработать событие, что он пересаживается за свободный стол...
+                // Тогда нужен поиск стола, за которым он сидел, вычисление платы (событие id 4)
+                int table_number = findTable(tableStats, name); // Поиск номера стола по имени клиента в map tableStats
+                if (table_number > 0)
+                {
+                    tableStats[table_number].work_time += (time_event - tableStats[table_number].time_table_occupied);
+                    tableStats[table_number].money += data.coast * SpendHours(time_event - tableStats[table_number].time_table_occupied);
+                    tableStats[table_number].occupied = "None";
+                }
+                else
+                {
+                    // Информация вносится в map tableStats
+                    tableStats[event.table_number].occupied = name;
+                    tableStats[event.table_number].time_table_occupied = event.time.toMinutes();
+                }
             }
             break;
-        case 3: // waiting
-            // Проверка на свободные столы, если их нету, то клиент уходит
-            // if( условием ){ проверять все столы, пока не occupied = FALSE}
-            if (fifo.size() + 1 > tableStats.size())
-            { // сменить IF на ELSE IF, когда сделаю норм IF на проверку занятости всех столов
+        case 3:                                 // waiting
+            if (checkTableOccupied(tableStats)) // Свободные столы есть?
+            {
+                cout << format("{:02}:{:02} 13 ICanWaitNoLonger!", event.time.hours, event.time.minutes) << endl;
+            }
+            else if (fifo.size() + 1 > tableStats.size()) // Если я встану в очередь, она будет больше, чем количество столов
+            {
                 cout << format("{:02}:{:02} 11 {}", event.time.hours, event.time.minutes, name) << endl;
+            }
+            else // Добавляется в очередь
+            {
+                fifo.push(name);
             }
             break;
         case 4: // walk away from table
@@ -252,26 +303,53 @@ void StartEvent(InputData data)
             {
                 cout << format("{:02}:{:02} 13 ClientUnknown", event.time.hours, event.time.minutes) << endl;
             }
+            else
+            {
+                int table_number = findTable(tableStats, name); // Поиск номера стола по имени клиента в map tableStats
+                tableStats[table_number].work_time += (time_event - tableStats[table_number].time_table_occupied);
+                tableStats[table_number].money += data.coast * SpendHours(time_event - tableStats[table_number].time_table_occupied);
+                if (fifo.empty())
+                {
+                    tableStats[table_number].occupied = "None";
+                }
+                else
+                {
+                    tableStats[table_number].occupied = fifo.front();
+                    tableStats[table_number].time_table_occupied = time_event;
+                    cout << format("{:02}:{:02} 12 {} {}", event.time.hours, event.time.minutes, fifo.front(), table_number) << endl;
+                    fifo.pop();
+                }
+                // Наступило время закрытия? Да, то событие 11.
+                // cout << format("{:02}:{:02} 11 {}", event.time.hours, event.time.minutes, event.n) << endl;
 
-            // Наступило время закрытия? Да, то событие 11.
-            // cout << format("{:02}:{:02} 11 {}", event.time.hours, event.time.minutes, event.n) << endl;
+                // Проверка сколько времени он просидел за компьютером (От "переменной - время сейчас")
+                // Вычисляем прибыль от клиента (через while делим минуты на 60, пока остаток не равен 0)
+                // Обновление информации в map tableStats
 
-            // Проверка сколько времени он просидел за компьютером (От "переменной - время сейчас")
-            // Вычисляем прибыль от клиента (через while делим минуты на 60, пока остаток не равен 0)
-            // Обновление информации в map tableStats
-
-            // Проверка на наличие очереди:
-            // Если в ней есть клиент, то генерируется событие 12, и за свободный стол, садится первый клиент из очереди, удаляется из очереди
+                // Проверка на наличие очереди:
+                // Если в ней есть клиент, то генерируется событие 12, и за свободный стол, садится первый клиент из очереди, удаляется из очереди
+            }
             break;
         }
     }
-
-    data.time_close.print(); // Вызвать событие 11, для всех клиентов, которые сейчас в ПК клубе ДО вывода времени закрытия
+    // Вызвать событие 11, для всех клиентов, которые сейчас в ПК клубе ДО вывода времени закрытия
+    int time_event = data.time_close.toMinutes();
+    for (int table_number = 1; table_number <= data.count_of_table; table_number++)
+    {
+        if (tableStats[table_number].occupied != "None")
+        {
+            tableStats[table_number].work_time += (time_event - tableStats[table_number].time_table_occupied);
+            tableStats[table_number].money += data.coast * SpendHours(time_event - tableStats[table_number].time_table_occupied);
+            cout << format("{:02}:{:02} 11 {}", data.time_close.hours, data.time_close.minutes, tableStats[table_number].occupied) << endl;
+            tableStats[table_number].occupied = "None";
+        }
+    }
+    data.time_close.print();
 
     // Выводим информацию о столах
     for (const auto &[key, value] : tableStats)
     {
-        cout << "Table " << key << ": " << value << endl;
+        cout << format("{} {} {:02}:{:02}", key, value.money, value.work_time / 60, value.work_time - (value.work_time / 60) * 60) << endl;
     }
 
     // Очистка памяти
