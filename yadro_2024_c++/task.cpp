@@ -1,4 +1,3 @@
-// #include "testtask.h"
 #include <iostream>
 #include <fstream>
 #include <vector>
@@ -319,15 +318,6 @@ void StartEvent(InputData data)
                     cout << format("{:02}:{:02} 12 {} {}", event.time.hours, event.time.minutes, fifo.front(), table_number) << endl;
                     fifo.pop();
                 }
-                // Наступило время закрытия? Да, то событие 11.
-                // cout << format("{:02}:{:02} 11 {}", event.time.hours, event.time.minutes, event.n) << endl;
-
-                // Проверка сколько времени он просидел за компьютером (От "переменной - время сейчас")
-                // Вычисляем прибыль от клиента (через while делим минуты на 60, пока остаток не равен 0)
-                // Обновление информации в map tableStats
-
-                // Проверка на наличие очереди:
-                // Если в ней есть клиент, то генерируется событие 12, и за свободный стол, садится первый клиент из очереди, удаляется из очереди
             }
             break;
         }
