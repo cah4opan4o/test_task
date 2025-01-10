@@ -31,21 +31,21 @@ struct Time
     }
 };
 
+struct InputEvent
+{
+    Time time;
+    int id_event;
+    string name_client;
+    int table_number;
+};
+
 struct InputData
 {
     int count_of_table;
     Time time_open;
     Time time_close;
     int coast;
-    vector<string> events;
-};
-
-struct InputEvent
-{
-    Time time;
-    int id_event;
-    string name_client;
-    int table;
+    vector<InputEvent> events;
 };
 
 struct Table // Для хранения информации о столах будет использован (map)
@@ -81,20 +81,23 @@ string checkArgument(int argc, char *argv[])
     }
 }
 
+//Может пригодиться для подсчёта времени проведённого за столом
 int roundToHours(int minutes)
 {
     return (minutes / 60);
 }
 
-bool checkTimeFormat(string time){
-    regex time_regex (R"(^([01][0-9]|2[0-3]):[0-5][0-9]$)");
-    return regex_match(time,time_regex);
+bool checkTimeFormat(string time)
+{
+    regex time_regex(R"(^([01][0-9]|2[0-3]):[0-5][0-9]$)");
+    return regex_match(time, time_regex);
 }
 
 bool checkEventFormat(string event)
 {
-    regex event_regex(R"(^([01][0-9]|2[0-3]):([0-5][0-9]) ([1-9]\d*) ([a-z0-9_-]+)(?: ([1-9]\d*))?$)");
-    return regex_match(event,event_regex);
+    regex event_regex(R"(^([01][0-9]|2[0-3]):([0-5][0-9]) ([1-9]\d*) ([a-z0-9_-]+)(?:\s+([1-9]\d*))?$)");
+    // return regex_match(event, event_regex);
+    return true;
 }
 
 // Получаем данные из файла в структуру InputData для дальнейшего взаимодествия
@@ -115,7 +118,7 @@ InputData readFile(string filename)
     istringstream stream(time_string);
     string time_start, time_end;
     stream >> time_start >> time_end;
-    
+
     if (!checkTimeFormat(time_start) || !checkTimeFormat(time_end))
     { // Проверка строк на формат времени
         throw time_string;
@@ -138,16 +141,44 @@ InputData readFile(string filename)
 
     string event;
     Time swap_time = Time(0, 0);
-    while (getline(file, event))
-    {
+    int intermediate_time = swap_time.toMinutes();
+    while (getline(file, event)){
         // Проверка event на формат
-        // if(!checkEventFormat(event)){
-        //     throw event;
-        // }
-        // else{
-        //     data.events.push_back(event);
-        // }
-        data.events.push_back(event);
+        if (!checkEventFormat(event)) // Надо решить проблему связанную с регулярным выражением для проверки
+        {
+            cout << "CheckEventFormat"<< endl;
+            throw event;
+        }
+        else
+        {
+            InputEvent object;
+            istringstream stream(event);
+            string time;
+            stream >> time >> object.id_event >> object.name_client;
+
+            if (!(stream >> object.table_number ))
+            {
+                object.table_number = -1;
+            }
+
+            char colon; // поглащене ':' из строки
+            istringstream stream_time(time);
+            int hour, minute;
+            stream_time >> hour >> colon >> minute;
+            object.time = Time(hour, minute);
+
+            if (intermediate_time > object.time.toMinutes() ) // проблема в том, что если стол не считывается, то это '-1' // || object.table_number < 0 || object.table_number > data.count_of_table
+            {
+                cout << "Time or Number of table" << endl;
+                throw format("{:02}:{:02} {} {} {}", object.time.hours, object.time.minutes, object.id_event, object.name_client, (object.table_number == -1 ? " " : to_string(object.table_number)));
+            }
+            else
+            {
+                intermediate_time = object.time.toMinutes();
+                data.events.push_back(object);
+            }
+        }
+        // data.events.push_back(event);
     }
     return data;
 }
@@ -169,23 +200,8 @@ void StartEvent(InputData data)
     int time_end = data.time_close.toMinutes();
 
     // проходим по событиям
-    for (string s : data.events)
+    for (InputEvent event : data.events)
     {
-        InputEvent event;
-        istringstream stream(s);
-        string time;
-        stream >> time >> event.id_event >> event.name_client;
-
-        if (!(stream >> event.table))
-        {
-            event.table = -1;
-        }
-
-        char colon; // поглащене ':' из строки
-        istringstream stream_time(time);
-        int hour, minute;
-        stream_time >> hour >> colon >> minute;
-        event.time = Time(hour, minute);
         cout << format("{:02}:{:02} {} {} {}", event.time.hours, event.time.minutes, event.id_event, event.name_client, (event.table == -1 ? " " : to_string(event.table))) << endl;
 
         int id = event.id_event;
@@ -267,7 +283,6 @@ void StartEvent(InputData data)
         fifo.pop();
     }
 }
-
 
 int main(int argc, char *argv[])
 {
