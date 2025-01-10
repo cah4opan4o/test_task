@@ -95,9 +95,8 @@ bool checkTimeFormat(string time)
 
 bool checkEventFormat(string event)
 {
-    regex event_regex(R"(^([01][0-9]|2[0-3]):([0-5][0-9]) ([1-9]\d*) ([a-z0-9_-]+)(?:\s+([1-9]\d*))?$)");
-    // return regex_match(event, event_regex);
-    return true;
+    regex event_regex(R"(^([01][0-9]|2[0-3]):([0-5][0-9]) ([1-9]\d*) ([a-z0-9_-]+)(?:\s([1-9]\d*))?\s*$)");
+    return regex_match(event, event_regex);
 }
 
 // Получаем данные из файла в структуру InputData для дальнейшего взаимодествия
@@ -167,7 +166,7 @@ InputData readFile(string filename)
             stream_time >> hour >> colon >> minute;
             object.time = Time(hour, minute);
 
-            if (intermediate_time > object.time.toMinutes() ) // проблема в том, что если стол не считывается, то это '-1' // || object.table_number < 0 || object.table_number > data.count_of_table
+            if (intermediate_time > object.time.toMinutes() || (object.table_number != -1 && (object.table_number < 1 || object.table_number > data.count_of_table) ))
             {
                 cout << "Time or Number of table" << endl;
                 throw format("{:02}:{:02} {} {} {}", object.time.hours, object.time.minutes, object.id_event, object.name_client, (object.table_number == -1 ? " " : to_string(object.table_number)));
@@ -202,7 +201,7 @@ void StartEvent(InputData data)
     // проходим по событиям
     for (InputEvent event : data.events)
     {
-        cout << format("{:02}:{:02} {} {} {}", event.time.hours, event.time.minutes, event.id_event, event.name_client, (event.table == -1 ? " " : to_string(event.table))) << endl;
+        cout << format("{:02}:{:02} {} {} {}", event.time.hours, event.time.minutes, event.id_event, event.name_client, (event.table_number == -1 ? " " : to_string(event.table_number))) << endl;
 
         int id = event.id_event;
         string name = event.name_client;
@@ -229,15 +228,15 @@ void StartEvent(InputData data)
             {
                 cout << format("{:02}:{:02} 13 ClientUnknown", event.time.hours, event.time.minutes) << endl;
             }
-            else if (tableStats[event.table].occupied) // Проверка свободен ли стол
+            else if (tableStats[event.table_number].occupied) // Проверка свободен ли стол
             {
                 cout << format("{:02}:{:02} 13 PlaceIsBusy", event.time.hours, event.time.minutes) << endl;
             }
             else // Если стол свободен, то клиент садится
             {
                 // Информация вносится в map tableStats
-                tableStats[event.table].occupied = true;
-                tableStats[event.table].work_time = event.time.toMinutes();
+                tableStats[event.table_number].occupied = true;
+                tableStats[event.table_number].work_time = event.time.toMinutes();
             }
             break;
         case 3: // waiting
